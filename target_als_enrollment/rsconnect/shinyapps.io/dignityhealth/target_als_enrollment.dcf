@@ -1,0 +1,13 @@
+name: target_als_enrollment
+title: target_als_enrollment
+username:
+account: dignityhealth
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 6807733
+bundleId: 6226955
+url: https://dignityhealth.shinyapps.io/target_als_enrollment/
+when: 1661201604.29381
+lastSyncTime: 1661201604.29381
+asMultiple: FALSE
+asStatic: FALSE

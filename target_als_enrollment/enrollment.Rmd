@@ -1,0 +1,113 @@
+---
+title: "enrollment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+d<-c(2,2,1,1,2,2,1,2,2,2,3,
+     2,0,0,0,0,0,0,1,3,7,2)
+data<-data.frame(matrix(d,2,11,byrow=TRUE),row.names = c("ALS","Control"))
+colnames(data)<-seq(1,11,by=1)
+```
+
+
+#Function 1: Number of subjects(ALS and control) enrolled at x month - based on the real data 
+```{r}
+#number_of_subjects_enrolled_at_x
+#get x
+#add until you get x
+nsubjects_ALS<- function(x) print(sum(data[1,c(1:x)],na.rm=T))
+nsubjects_control<- function(x) print(sum(data[2,c(1:x)],na.rm=T))
+
+```
+
+#Function 2: Number of visits at x month - based on real data
+```{r}
+#number_of_visits
+total_visit_ALS<-function(x)
+{
+#set<-ifelse(x>length(data),append(as.numeric(data[1,1:length(data)]),replicate(x-length(data),0)), as.numeric(data[1,1:x]))
+#if_condition_to_calculate_future_number_of_visits_with_limited_subject_enrolled
+if(x>length(data)) set<-append(as.numeric(data[1,1:length(data)]),replicate(x-length(data),0)) else set<-as.numeric(data[1,1:x])
+c<-seq(x-1,0,by=-1)
+d<-ifelse(c>=4|c==0,as.integer(c/4)+1,1)
+#e_is_to_ensure_the_number_of_visits_doesn't_cross_5
+e<-ifelse(d>=5,5,d)
+return(sum(set*e))
+}
+```
+
+```{r}
+total_visit_control<-function(x)
+{
+#set<-ifelse(x>length(data),append(as.numeric(data[1,1:length(data)]),replicate(x-length(data),0)), as.numeric(data[1,1:x]))
+#if_condition_to_calculate_future_number_of_visits_with_limited_subject_enrolled
+if(x>length(data)) set<-append(as.numeric(data[2,1:length(data)]),replicate(x-length(data),0)) else set<-as.numeric(data[2,1:x])
+c<-seq(x-1,0,by=-1)
+d<-ifelse(c>=6|c==0,as.integer(c/6)+1,1)
+#e_is_to_ensure_the_number_of_visits_doesn't_cross_2
+e<-ifelse(d>=2,2,d)
+return(sum(set*e))
+}
+```
+
+
+```{r}
+
+```
+dates = seq(as.Date("07-01-2021",  format = "%d-%m-%Y"), length.out = 120, by = "month")
+
+#Function 3: Predicted model based on total number of subjects after 3 years
+#Minimum annual enrollment - 50 for ALS and 20 for controls
+
+```{r}
+#getting_total_enrollments
+#for (i in 1:11) d$sum[i]<-sum(d[c(1:i),1])
+d <- as.data.frame(data %>% t())
+
+for (i in 1:11) d$sum_ALS[i]<-nsubjects_ALS(i)
+for (i in 1:11) d$sum_control[i]<-nsubjects_control(i)
+
+d[12,]<-c(0,0,50,20)
+d[24,]<-c(0,0,110,45)
+d[36,]<-c(0,0,180,75)
+
+d$time<-seq(1,36,1)
+d$dates = seq(as.Date("01-07-2021",  format = "%d-%m-%Y"), length.out = 36, by = "month")
+ 
+d %>% 
+  ggplot(aes(x=dates,y=sum_ALS))+
+  geom_point(aes(x=dates,y=sum_ALS))+
+  stat_smooth(method="gam", color="#69b3a2")+
+  scale_x_date(date_labels = "%b-%Y")
+
+#model<- glm(sum_ALS~time,data=d)
+model_ALS<- glm(sum_ALS~dates,data=d)
+model_control<- glm(sum_control~dates,data=d)
+
+```
+
+#Predicts the total number of subjects at x month based on the model 
+
+```{r}
+
+newdata<- data.frame(dates=as.Date(c("2023-03-01","2023-07-01","2023-09-01","2024-02-01")))
+                     
+#newdata<- data.frame(time=c(26,30,34))
+
+
+ans<-data.frame(predicted_ALS=predict(model_ALS,newdata))
+c_ans<-cbind(newdata,ans)
+
+ans_c<-data.frame(predicted_control=predict(model_control,newdata))
+d_ans<-cbind(c_ans,ans_c)
+d_ans$dates<-format(d_ans$dates,"%b %Y")
+d_ans
+```
+
