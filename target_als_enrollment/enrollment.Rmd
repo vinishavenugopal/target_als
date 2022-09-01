@@ -39,7 +39,21 @@ c<-seq(x-1,0,by=-1)
 d<-ifelse(c>=4|c==0,as.integer(c/4)+1,1)
 #e_is_to_ensure_the_number_of_visits_doesn't_cross_5
 e<-ifelse(d>=5,5,d)
-return(sum(set*e))
+total_vists=sum(set*e)
+
+df=data.frame(visits=e,nos=set)
+
+f<- df%>%
+  group_by(visits)%>%
+  summarise(totalnos=sum(nos))%>%
+  mutate(plasma=22*visits*totalnos,serum=16*visits*totalnos,urine=11*visits*totalnos,
+         csf_min=ifelse(visits<=2,0,visits-2), csf_max=ifelse(visits<=3,visits,3),
+         csf_min_sample=32*totalnos*csf_min, csf_max_sample=32*totalnos*csf_max)
+
+result<- data.frame(total_visits=total_vists,Plasma=sum(f$plasma),Serum=sum(f$serum),Urine=sum(f$urine),CSF_min=sum(f$csf_min_sample),CSF_max=sum(f$csf_max_sample))
+
+return(list(f %>% select(visits,subjects=totalnos), result))
+
 }
 ```
 
@@ -81,11 +95,13 @@ d[36,]<-c(0,0,180,75)
 d$time<-seq(1,36,1)
 d$dates = seq(as.Date("01-07-2021",  format = "%d-%m-%Y"), length.out = 36, by = "month")
  
-d %>% 
-  ggplot(aes(x=dates,y=sum_ALS))+
-  geom_point(aes(x=dates,y=sum_ALS))+
-  stat_smooth(method="gam", color="#69b3a2")+
+p <- d %>% 
+  ggplot(aes(x=time,y=sum_ALS))+
+  geom_point(aes(x=time,y=sum_ALS))+
+  scale_x_continuous(breaks=c(1,2,3,4,5))+
+  stat_smooth(method="gam",color="#69b3a2")
   scale_x_date(date_labels = "%b-%Y")
+
 
 #model<- glm(sum_ALS~time,data=d)
 model_ALS<- glm(sum_ALS~dates,data=d)
@@ -100,14 +116,106 @@ model_control<- glm(sum_control~dates,data=d)
 newdata<- data.frame(dates=as.Date(c("2023-03-01","2023-07-01","2023-09-01","2024-02-01")))
                      
 #newdata<- data.frame(time=c(26,30,34))
-
+newdata<- data.frame(dates=seq(as.Date("01-07-2021",  format = "%d-%m-%Y"), length.out = 36, by = "month"))
 
 ans<-data.frame(predicted_ALS=predict(model_ALS,newdata))
 c_ans<-cbind(newdata,ans)
 
 ans_c<-data.frame(predicted_control=predict(model_control,newdata))
 d_ans<-cbind(c_ans,ans_c)
-d_ans$dates<-format(d_ans$dates,"%b %Y")
+#d_ans$dates<-format(d_ans$dates,"%b %Y")
 d_ans
+
+
 ```
 
+```{r fig.height=8, fig.width=8}
+
+stat_table<- d_ans %>%
+  mutate(nos_month = floor(predicted_ALS - lag(predicted_ALS, default=first(predicted_ALS))),
+         nos_month_c= floor(predicted_control - lag(predicted_control, default = first(predicted_control))))
+
+
+data<-stat_table %>%
+  dplyr::select(ALS=nos_month,Control=nos_month_c) %>%
+  rownames_to_column() %>%
+  pivot_longer(, cols = -rowname) %>%
+  pivot_wider(, names_from = rowname) %>%
+  as.data.frame()
+
+rownames(data)<-data$name
+data<-data[,-1]
+# 
+# total_visit_ALS(100)
+# 
+# total_visit_control(100)
+# 
+# 
+# nsubjects_ALS(36)
+# nsubjects_control(36)
+
+
+final<-merge(stat_table,d,by="dates")
+
+for (i in 1:36) final$output1[i]<-total_visit_ALS(i)[1]
+for (i in 1:36) final$output2[i]<- total_visit_ALS(i)[2]
+
+for (i in 1:36) final$tooltip[i] <- knitr::kable(final$output1[i], format = "html")
+  
+  fin<-final %>% 
+  ggplot(aes(x=dates,y=predicted_ALS,tooltip=tooltip))+
+  geom_point_interactive(aes(color="Predicted"))+
+  geom_smooth_interactive(method="gam",color="#69b3a2",tooltip="")+
+  scale_x_date(date_labels = "%b-%Y", date_breaks = "2 month")+
+  geom_point(aes(x=dates,y=sum_ALS,color="Actual"))+
+  geom_smooth(aes(x=dates,y=sum_ALS),method="gam")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5),
+              axis.title.y = element_text(vjust = 1,size=10),
+              plot.title = element_text(hjust=0.5,color="darkred",size = 10,face = "bold"),
+              legend.title = element_text(size=0),
+              legend.text = element_text(size=6))+
+  labs(title="Predicted subject enrollment from June 2021- June 2024", x="",y="No. of subjects(n)")
+
+
+girafe(ggobj = fin,
+       options= list(
+         opts_tooltip(
+           opacity = 0.8, use_fill = TRUE,
+      use_stroke = FALSE, 
+      css = "padding:5pt;font-family: Open Sans;color:white"),
+      opts_hover_inv(css = "opacity:0.5"), 
+      opts_hover(css = "fill:#4c6061;")
+       ))
+
+
+```
+
+```{r}
+
+for (i in 1:36) final$tooltip2[i] <- knitr::kable(final$output2[i], format = "html")
+  
+  fin<-final %>% 
+  ggplot(aes(x=dates,y=predicted_ALS,tooltip=tooltip2))+
+  geom_point_interactive(aes(color="Predicted"))+
+  geom_smooth_interactive(method="gam",color="#69b3a2",tooltip="")+
+  scale_x_date(date_labels = "%b-%Y", date_breaks = "2 month")+
+  geom_point(aes(x=dates,y=sum_ALS,color="Actual"))+
+  geom_smooth(aes(x=dates,y=sum_ALS),method="gam")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5),
+              axis.title.y = element_text(vjust = 1,size=10),
+              plot.title = element_text(hjust=0.5,color="darkred",size = 10,face = "bold"),
+              legend.title = element_text(size=0),
+              legend.text = element_text(size=6))+
+  labs(title="Predicted subject enrollment from June 2021- June 2024", x="",y="No. of subjects(n)")
+
+girafe(ggobj = fin,
+       options= list(
+         opts_tooltip(
+           opacity = 0.8, use_fill = TRUE,
+      use_stroke = FALSE, 
+      css = "padding:5pt;font-family: Open Sans;color:white"),
+      opts_hover_inv(css = "opacity:0.5"), 
+      opts_hover(css = "fill:#4c6061;")
+       ))
+
+```
