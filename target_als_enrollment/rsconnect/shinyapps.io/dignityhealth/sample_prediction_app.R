@@ -28,6 +28,8 @@ real_data_both <-c(2,2,1,1,2,2,1,2,2,2,3,
 real_data<-as.data.frame(matrix(real_data_both,11,2,byrow=FALSE))
 colnames(real_data)<-c("ALS","Control")
 real_data$Dates = seq(as.Date("07-01-2021",  format = "%m-%d-%Y"), length.out = 11, by = "month")
+real_data$total<-real_data$ALS+real_data$Control
+rd<-pivot_longer(real_data,cols=c(1,2,4),names_to = "Group",values_to = "nos")
 
 real_data_T = as.data.frame(t(real_data))
 colnames(real_data_T)<-seq(1,11,by=1)
@@ -48,14 +50,19 @@ ui <- fluidPage(
                 br(),
                 strong("TARGET ALS- Subject Enrollment"),
                 h6("The plot shows the distribution of the current subject enrollment"),
+                em("Please change Group on the left tab to see distribution for Controls"),
                 uiOutput("NOS_barplot"),
-                div(DT::dataTableOutput('table'),style="font-size: 75%; width: 50%")
+                #div(DT::dataTableOutput('table'),style="font-size: 75%; width: 50%"),
+                strong("Distribution across each group - ALS, Control, Total"),
+                uiOutput("NOS_barplot2")
         ),
         tabPanel("Predicted graph - Visits",
                 h6("The prediction curve is based on the current data and minimum annual enrollment"),
                 strong("Assumptions for the prediction:"),
                 h6("1.Minimum annual enrollment for consecutive years to be 50,110,180 for ALS"),
                 h6("2.Minimum annual enrollment for consecutive years to be 20,45,75 for Controls"),
+                strong("Subjects enrolled and total number of visits"),
+                ggiraphOutput("Predicted_samples3"),
                 strong("Visit detials:"),
                 h6("1. ALS subjects visits every 4 months scheduled for 5 visits"),
                 h6("2. Controls visits every 6 months scheduled for 2 visits"),
@@ -78,7 +85,10 @@ ui <- fluidPage(
                  div(DT::dataTableOutput('print1'),style="font-size: 75%; width: 50%"),
                  strong("Samples:"),
                  br(),
-                 div(DT::dataTableOutput('print2'),style="font-size: 75%; width: 50%"))
+                 div(DT::dataTableOutput('print2'),style="font-size: 75%; width: 50%"),
+                 strong("DNA and RNA samples:"),
+                 br(),
+                 div(DT::dataTableOutput('print3'),style="font-size: 75%; width: 50%"))
       )
     )
   )
@@ -152,20 +162,28 @@ server <- function(input,output){
             summarise(totalnos=sum(nos))%>%
             mutate(plasma=22*visits*totalnos,serum=16*visits*totalnos,urine=11*visits*totalnos,
                 csf_min=ifelse(visits<=2,0,visits-2), csf_max=ifelse(visits<=3,visits,3),
-                csf_min_sample=32*totalnos*csf_min, csf_max_sample=32*totalnos*csf_max)
+                csf_min_sample=32*totalnos*csf_min, csf_max_sample=32*totalnos*csf_max,
+                rna=2*totalnos, dna= totalnos, total_dna_rna=3*totalnos)
         
-        result<- data.frame(total_visits=total_vists,Plasma=sum(f$plasma),Serum=sum(f$serum),Urine=sum(f$urine),CSF_min=sum(f$csf_min_sample),CSF_max=sum(f$csf_max_sample))
+        result<- data.frame(Plasma=sum(f$plasma),Serum=sum(f$serum),Urine=sum(f$urine),
+                            CSF_min=sum(f$csf_min_sample),CSF_max=sum(f$csf_max_sample),
+                            RNA=sum(f$rna),DNA=sum(f$dna),DNA_RNA=sum(f$total_dna_rna))
         
-        return(list(f %>% select(visits,subjects=totalnos), result))
+        result_sub <- data.frame(total_subjects=sum(final[c(1:x),3],na.rm = T), total_visits=total_vists)
+        
+        return(list(f %>% select(visits,subjects=totalnos), result, result_sub))
         }
 
         visits_sample = total_visit_ALS(which(final$Dates==input$month))[[1]]
 
         for (i in 1:36) final$output1[i]<-total_visit_ALS(i)[1]
         for (i in 1:36) final$output2[i]<- total_visit_ALS(i)[2]
+        for (i in 1:36) final$output3[i]<- total_visit_ALS(i)[3]
         
         for (i in 1:36) final$tooltip1[i] <- knitr::kable(final$output1[i], format = "html")
         for (i in 1:36) final$tooltip2[i] <- knitr::kable(final$output2[i], format = "html")
+        for (i in 1:36) final$tooltip3[i]<- knitr::kable(final$output3[i], format = "html")
+        
         final
     })
 
@@ -175,7 +193,9 @@ server <- function(input,output){
             filter(Dates==input$month) %>%
             dplyr::select(output1) %>%
             as.data.frame()
-        datatable(t1[[1]][[1]])
+        datatable(t1[[1]][[1]],
+                  options = list(searching = FALSE, pageLength = 15, lengthChange = FALSE),
+                  rownames= FALSE)
     })
     
     output$print2<- renderDataTable({
@@ -183,10 +203,25 @@ server <- function(input,output){
             filter(Dates==input$month) %>%
             dplyr::select(output2) %>%
             as.data.frame()
-        datatable(t2[[1]][[1]])
+            
+        
+        t2<- t2[[1]][[1]] %>%
+          mutate(total_samples=paste(Plasma+Serum+Urine+CSF_min,"-",Plasma+Serum+Urine+CSF_max))
+        datatable(t2[c(1:5,9)],
+                  options = list(searching = FALSE, pageLength = 15, lengthChange = FALSE),
+                  rownames= FALSE)
     })
 
-
+    output$print3<- renderDataTable({
+      t3<-final_data() %>%
+        filter(Dates==input$month) %>%
+        dplyr::select(output2) %>%
+        as.data.frame()
+      datatable(t3[[1]][[1]][6:8],
+                options = list(searching = FALSE, pageLength = 15, lengthChange = FALSE),
+                rownames= FALSE)
+    })
+    
     output$Predicted_samples1 <- renderggiraph({
     
       gg<-final_data() %>% 
@@ -201,7 +236,7 @@ server <- function(input,output){
               plot.title = element_text(hjust=0.5,color="darkred",size = 10,face = "bold"),
               legend.title = element_text(size=0),
               legend.text = element_text(size=6))+
-       labs(title="Predicted subject enrollment from June 2021- June 2024", x="",y="No. of subjects(n)")
+       labs(title="Predicted subject enrollment(visit details) from June 2021- June 2024", x="",y="No. of subjects(n)")
         
         girafe(ggobj = gg,
               options= list(
@@ -229,7 +264,7 @@ server <- function(input,output){
               plot.title = element_text(hjust=0.5,color="darkred",size = 10,face = "bold"),
               legend.title = element_text(size=0),
               legend.text = element_text(size=6))+
-        labs(title="Predicted subject enrollment from June 2021- June 2024", x="",y="No. of subjects(n)")
+        labs(title="Predicted subject enrollment(sample details) from June 2021- June 2024", x="",y="No. of subjects(n)")
     
       girafe(ggobj = gg,
             options= list(
@@ -243,8 +278,39 @@ server <- function(input,output){
 
     })
 
+    output$Predicted_samples3 <- renderggiraph({
+      
+      gg<-final_data() %>% 
+        ggplot(aes(x=Dates,y=predicted,tooltip=tooltip3))+
+        geom_point_interactive(aes(color="Predicted"))+
+        geom_smooth_interactive(method="gam",color="#69b3a2",tooltip="")+
+        scale_x_date(date_labels = "%b-%Y", date_breaks = "2 month")+
+        geom_point(aes(x=Dates,y=sum,color="Actual"))+
+        geom_smooth(aes(x=Dates,y=sum),method="gam")+
+        theme(axis.text.x = element_text(angle=90,vjust=0.5),
+              axis.title.y = element_text(vjust = 1,size=10),
+              plot.title = element_text(hjust=0.5,color="darkred",size = 10,face = "bold"),
+              legend.title = element_text(size=0),
+              legend.text = element_text(size=6))+
+        labs(title="Predicted subject enrollment from June 2021- June 2024", x="",y="No. of subjects(n)")
+      
+      girafe(ggobj = gg,
+             options= list(
+               opts_tooltip(
+                 opacity = 0.8, use_fill = TRUE,
+                 use_stroke = FALSE, 
+                 css = "padding:5pt;font-family: Open Sans;color:white"),
+               opts_hover_inv(css = "opacity:0.5"), 
+               opts_hover(css = "fill:#4c6061;")
+             ))
+      
+    })
+    
+    
     output$table<- DT::renderDataTable(
-        datatable(data(),colnames=c("No. of Subjects","Date"),options=list(searching=TRUE))
+        datatable(data(),colnames=c("No. of Subjects","Date"),
+                  options = list(searching = FALSE, pageLength = 15, lengthChange = FALSE),
+                  rownames= FALSE)
     )
 
     output$NOS_barplot <- renderUI({
@@ -262,7 +328,24 @@ server <- function(input,output){
     renderPlot(gg)
   })
 
-
+    output$NOS_barplot2 <- renderUI({
+      gg<- rd %>% ggplot(aes(x=Dates, y=nos, color=Group, fill=Group))+
+        geom_bar(stat="identity", position="dodge")+
+        scale_x_date(date_labels = "%b-%Y", date_breaks = "1 month")+
+        scale_y_continuous(breaks=seq(0,10,by=1))+
+        theme(axis.text.x = element_text(angle=90,vjust=0.5),
+              axis.title.y = element_text(vjust = 1,size=12),
+              plot.title = element_text(hjust=0.5,color="darkred",size = 12,face = "bold"),
+              legend.title = element_text(size=10),
+              legend.text = element_text(size=10))+
+        labs(title=paste("No. of subject enrolled for the first year"), x="",y="No.of subjects(n)")
+      
+      renderPlot(gg)
+    })
+    
 }
 
 shinyApp(ui=ui, server = server)
+
+
+

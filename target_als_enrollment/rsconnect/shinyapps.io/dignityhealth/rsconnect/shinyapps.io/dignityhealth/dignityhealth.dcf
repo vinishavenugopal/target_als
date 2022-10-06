@@ -1,0 +1,14 @@
+name: dignityhealth
+title: dignityhealth
+username:
+account: dignityhealth
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 7165696
+bundleId: 6353419
+url: https://dignityhealth.shinyapps.io/dignityhealth/
+when: 1664489512.22194
+lastSyncTime: 1664489512.22194
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: enrollment.Rmd|target_als.dcf|target_als_enrollment.dcf
